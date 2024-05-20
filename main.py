@@ -6,9 +6,13 @@ import http.client
 import json
 from fpdf import FPDF
 import io
+from flask import Flask
+
+# Inicialização do servidor Flask
+server = Flask(__name__)
 
 # Inicialização do aplicativo Dash
-app = dash.Dash(__name__)
+app = dash.Dash(__name__, server=server, url_base_pathname='/dash/')
 
 # Estilos CSS
 app.css.append_css({
@@ -18,7 +22,7 @@ app.css.append_css({
     'external_url': 'https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css'
 })
 
-# Layout do aplicativo
+# Layout do aplicativo Dash
 app.layout = html.Div(style={
     'fontFamily': 'Arial', 
     'backgroundColor': '#f0f2f5', 
@@ -26,7 +30,6 @@ app.layout = html.Div(style={
     'maxWidth': '1200px', 
     'margin': 'auto'
 }, children=[
-    # Título da página
     html.H1('Dashboard de Futebol', style={
         'textAlign': 'center', 
         'color': '#003366',
@@ -34,7 +37,6 @@ app.layout = html.Div(style={
     }),
     
     html.Div([
-        # Primeiro dropdown para seleção do tópico principal
         dcc.Dropdown(
             id='dropdown1',
             options=[
@@ -46,25 +48,21 @@ app.layout = html.Div(style={
             placeholder='Selecione um tópico principal',
             style={'marginBottom': '10px'}
         ),
-        
-        # Segundo dropdown para seleção do filtro
         dcc.Dropdown(
             id='dropdown2',
             placeholder='Selecione um filtro',
             style={'marginBottom': '20px'}
         ),
-        
-        # Tabela de dados com interatividade
         dash_table.DataTable(
             id='datatable',
             columns=[{"name": i, "id": i} for i in ['Coluna 1', 'Coluna 2', 'Coluna 3']],
             data=[],
-            editable=True,  # Permitir edição de células
-            filter_action='native',  # Permitir filtragem de dados
-            sort_action='native',  # Permitir ordenação de colunas
-            row_selectable='single',  # Permitir seleção de linhas
-            selected_rows=[],  # Nenhuma linha selecionada inicialmente
-            style_table={'overflowX': 'auto', 'marginBottom': '20px'},  # Permitir rolagem horizontal
+            editable=True, 
+            filter_action='native',  
+            sort_action='native',  
+            row_selectable='single',  
+            selected_rows=[],  
+            style_table={'overflowX': 'auto', 'marginBottom': '20px'},  
             style_cell={
                 'minWidth': '100px', 
                 'maxWidth': '200px',
@@ -73,56 +71,32 @@ app.layout = html.Div(style={
                 'padding': '10px'
             },
             style_header={
-                'backgroundColor': '#003366',  # Cor de fundo do cabeçalho
-                'color': 'white',  # Cor do texto do cabeçalho
+                'backgroundColor': '#003366',  
+                'color': 'white',  
                 'fontWeight': 'bold'
             },
             style_data={
-                'backgroundColor': '#ffffff',  # Cor de fundo dos dados
-                'color': '#000',  # Cor do texto dos dados
+                'backgroundColor': '#ffffff',  
+                'color': '#000',  
                 'border': '1px solid #ddd'
             }
         ),
-        
-        # Botões para exportar dados
         html.Div([
             html.Button('Exportar XLS', id='btn-xls', n_clicks=0, className='button-primary', style={'marginRight': '10px'}),
             html.Button('Exportar PDF', id='btn-pdf', n_clicks=0, className='button-primary', style={'marginRight': '10px'}),
             html.Button('Exportar CSV', id='btn-csv', n_clicks=0, className='button-primary')
         ], style={'textAlign': 'center', 'marginBottom': '20px'}),
         
-        # Componentes para download de arquivos
         dcc.Download(id="download-dataframe-xls"),
         dcc.Download(id="download-dataframe-pdf"),
         dcc.Download(id="download-dataframe-csv"),
         
-        # Campo de entrada para exibir e copiar a chamada da API
         html.Div([
             dcc.Input(id='api-call', type='text', readOnly=True, style={'width': '80%', 'marginRight': '10px'}),
             html.Button('Copiar', id='btn-api-call', n_clicks=0, className='button-primary')
         ], style={'textAlign': 'center'})
     ], style={'width': '100%', 'margin': 'auto'})
 ])
-
-# Callback para atualizar o segundo dropdown com base na seleção do primeiro
-@app.callback(
-    Output('dropdown2', 'options'),
-    Input('dropdown1', 'value')
-)
-def set_dropdown_options(selected_option):
-    # Se o usuário selecionar "Leagues", carregar países para filtrar as ligas
-    if selected_option == 'leagues':
-        endpoint = "/v3/countries"
-        data = call_api(endpoint)
-        return [{'label': country['name'], 'value': country['name']} for country in data['response']]
-    
-    # Se o usuário selecionar "Teams", carregar ligas para filtrar os times
-    elif selected_option == 'teams':
-        endpoint = "/v3/leagues"
-        data = call_api(endpoint)
-        return [{'label': league['league']['name'], 'value': league['league']['id']} for league in data['response']]
-    
-    return []
 
 # Função para fazer a chamada à API
 def call_api(endpoint):
@@ -135,6 +109,22 @@ def call_api(endpoint):
     res = conn.getresponse()
     data = res.read()
     return json.loads(data.decode("utf-8"))
+
+# Callback para atualizar o segundo dropdown com base na seleção do primeiro
+@app.callback(
+    Output('dropdown2', 'options'),
+    Input('dropdown1', 'value')
+)
+def set_dropdown_options(selected_option):
+    if selected_option == 'leagues':
+        endpoint = "/v3/countries"
+        data = call_api(endpoint)
+        return [{'label': country['name'], 'value': country['name']} for country in data['response']]
+    elif selected_option == 'teams':
+        endpoint = "/v3/leagues"
+        data = call_api(endpoint)
+        return [{'label': league['league']['name'], 'value': league['league']['id']} for league in data['response']]
+    return []
 
 # Callback para atualizar a tabela de dados e exibir a chamada da API, e copiar o link para a área de transferência
 @app.callback(
@@ -275,4 +265,4 @@ def export_pdf(n_clicks, rows):
 
 # Executa o servidor do aplicativo
 if __name__ == '__main__':
-    app.run_server(debug=True)  # Executar o servidor do aplicativo
+    app.run_server(debug=True)
